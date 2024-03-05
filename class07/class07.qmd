@@ -1,0 +1,226 @@
+---
+title: "class07"
+format: pdf
+---
+
+```{r}
+url <- "https://tinyurl.com/UK-foods"
+x <- read.csv(url)
+```
+
+Q1. How many rows and columns are in your new data frame named x? What R functions could you use to answer this questions?
+```{r}
+nrow(x) # with ncol
+ncol(x) # with nrow
+dim(x) # OR this alone
+```
+We can use head(x) to preview the first 6 rows.
+```{r}
+# fixing row-names
+# rownames(x) <- x[,1]
+# x <- x[,-1]
+# head(x)
+# dim(x)
+# we could also read the data file again, but set row.names argument of read.csv() to be the first column
+x<-read.csv(url, row.names=1)
+head(x)
+```
+
+Q2. Which approach to solving the ‘row-names problem’ mentioned above do you prefer and why? Is one approach more robust than another under certain circumstances?
+
+I prefer the alternative approach of reading with the row.names argument set to 1 in read.csv(). It is more legible and requires less code. Also, repeating the first approach will begin to produce errors since then more columns are being removed from x and we begin to lose data. The read.csv() method is better able to be run many times without producing errors.
+
+```{r}
+barplot(as.matrix(x), beside=T, col=rainbow(nrow(x)))
+```
+Q3. Changing what optional argument in the above barplot() function results in the following plot?
+```{r}
+# the beside argument, which changes from true (T) to false (F)
+barplot(as.matrix(x), beside=F, col=rainbow(nrow(x)))
+```
+Q5. Generating all pairwise plots may help somewhat. Can you make sense of the following code and resulting figure? What does it mean if a given point lies on the diagonal for a given plot?
+```{r}
+pairs(x, col=rainbow(10), pch=16)
+```
+Somewhat, although it's hard to read. If a given point lies on the line, it means that both countries consume about equal amounts in grams of that food, on average.
+
+Q6. What is the main differences between N. Ireland and the other countries of the UK in terms of this data-set?
+
+N. Ireland tends to consume less cheese, fish, fresh fruit, and alcoholic drinks but more fresh potatoes than the other countries in the data set.
+
+```{r}
+pca <- prcomp(t(x))
+summary(pca)
+```
+Q7. Complete the code below to generate a plot of PC1 vs PC2. The second line adds text labels over the data points.
+```{r}
+# Plot PC1 vs PC2
+plot(pca$x[,1], pca$x[,2], xlab="PC1", ylab="PC2", xlim=c(-270,500))
+text(pca$x[,1], pca$x[,2], colnames(x))
+```
+
+Q8. Customize your plot so that the colors of the country names match the colors in our UK and Ireland map and table at start of this document.
+```{r}
+# Plot PC1 vs PC2
+plot(pca$x[,1], pca$x[,2], xlab="PC1", ylab="PC2", xlim=c(-270,500))
+text(pca$x[,1], pca$x[,2], colnames(x), col=c("orange", "red", "blue", "green"))
+```
+
+```{r}
+v <- round( pca$sdev^2/sum(pca$sdev^2) * 100 ) #how much variation in the original data does each PC account for
+v
+## or the second row here...
+z <- summary(pca)
+z$importance
+
+#This information can be summarized in a plot of the variances (eigenvalues) with respect to the principal component number (eigenvector number), which is given below.
+barplot(v, xlab="Principal Component", ylab="Percent Variation")
+```
+
+loading scores = influence of each original variable upon principal components
+```{r}
+## Lets focus on PC1 as it accounts for > 90% of variance 
+par(mar=c(10, 3, 0.35, 0))
+barplot( pca$rotation[,1], las=2)
+```
+
+Q9: Generate a similar ‘loadings plot’ for PC2. What two food groups feature prominently and what does PC2 mainly tell us about?
+```{r}
+par(mar=c(10, 3, 0.35, 0))
+barplot( pca$rotation[,2], las=2)
+```
+Fresh potatoes (negative) and soft drinks (positive) feature prominently. PC2 tells us more about where the variance in the data comes from, accounting for about 29% in addition to PC1 (67%). We see that fresh potatoes continue to be a significant feature in both PC1 and 2, indicating how strong of an influence they are in producing variation in this data.
+
+```{r}
+library(ggplot2) # using ggplot2 now
+
+df <- as.data.frame(pca$x)
+df_lab <- tibble::rownames_to_column(df, "Country")
+
+# Our first basic plot
+ggplot(df_lab) + 
+  aes(PC1, PC2, col=Country) + 
+  geom_point()
+```
+```{r}
+# make it look nicer
+ggplot(df_lab) + 
+  aes(PC1, PC2, col=Country, label=Country) + 
+  geom_hline(yintercept = 0, col="gray") +
+  geom_vline(xintercept = 0, col="gray") +
+  geom_point(show.legend = FALSE) +
+  geom_label(hjust=1, nudge_x = -10, show.legend = FALSE) +
+  expand_limits(x = c(-300,500)) +
+  xlab("PC1 (67.4%)") +
+  ylab("PC2 (28%)") +
+  theme_bw()
+```
+```{r}
+# now doing the same for pca$rotation (loadings/PC contributions figures)
+ld <- as.data.frame(pca$rotation)
+ld_lab <- tibble::rownames_to_column(ld, "Food")
+
+ggplot(ld_lab) +
+  aes(PC1, Food) +
+  geom_col() 
+```
+```{r}
+# funky with the features (reordering, colors, theme)
+ggplot(ld_lab) +
+  aes(PC1, reorder(Food, PC1), bg=PC1) +
+  geom_col() + 
+  xlab("PC1 Loadings/Contributions") +
+  ylab("Food Group") +
+  scale_fill_gradient2(low="purple", mid="gray", high="darkgreen", guide=NULL) +
+  theme_bw()
+```
+```{r}
+## The inbuilt biplot() can be useful for small datasets 
+biplot(pca)
+```
+
+## RNA seq PCA
+```{r}
+url2 <- "https://tinyurl.com/expression-CSV"
+rna.data <- read.csv(url2, row.names=1)
+head(rna.data)
+dim(rna.data)
+```
+Q10. How many genes and samples are in this data set?
+Columns are samples and rows are genes. There are 100 genes (rows) and 10 samples (columns).
+
+```{r}
+## PCA time! Again we have to take the transpose of our data 
+pca <- prcomp(t(rna.data), scale=TRUE)
+ 
+## Simple un polished plot of pc1 and pc2
+plot(pca$x[,1], pca$x[,2], xlab="PC1", ylab="PC2")
+```
+```{r}
+summary(pca)
+plot(pca, main="Quick scree plot")
+```
+```{r}
+# we can make a scree plot too!
+## Variance captured per PC 
+pca.var <- pca$sdev^2
+
+## Percent variance is often more informative to look at 
+pca.var.per <- round(pca.var/sum(pca.var)*100, 1)
+pca.var.per
+
+barplot(pca.var.per, main="Scree Plot", 
+        names.arg = paste0("PC", 1:10),
+        xlab="Principal Component", ylab="Percent Variation")
+```
+```{r}
+## A vector of colors for wt and ko samples
+colvec <- colnames(rna.data)
+colvec[grep("wt", colvec)] <- "red"
+colvec[grep("ko", colvec)] <- "blue"
+
+plot(pca$x[,1], pca$x[,2], col=colvec, pch=16,
+     xlab=paste0("PC1 (", pca.var.per[1], "%)"),
+     ylab=paste0("PC2 (", pca.var.per[2], "%)"))
+
+text(pca$x[,1], pca$x[,2], labels = colnames(rna.data), pos=c(rep(4,5), rep(2,5)))
+```
+```{r}
+library(ggplot2)
+
+df <- as.data.frame(pca$x)
+
+# using ggplot now!
+ggplot(df) + 
+  aes(PC1, PC2) + 
+  geom_point()
+
+# Add a 'wt' and 'ko' "condition" column
+df$samples <- colnames(rna.data) 
+df$condition <- substr(colnames(rna.data),1,2)
+
+# make it all pretty!
+p <- ggplot(df) + 
+        aes(PC1, PC2, label=samples, col=condition) + 
+        geom_label(show.legend = FALSE)
+p + labs(title="PCA of RNASeq Data",
+       subtitle = "PC1 clealy seperates wild-type from knock-out samples",
+       x=paste0("PC1 (", pca.var.per[1], "%)"),
+       y=paste0("PC2 (", pca.var.per[2], "%)"),
+       caption="Class example data") +
+     theme_bw()
+p
+```
+```{r}
+# generating the top 10 genes contributing to PC1
+loading_scores <- pca$rotation[,1]
+
+## Find the top 10 measurements (genes) that contribute
+## most to PC1 in either direction (+ or -)
+gene_scores <- abs(loading_scores) 
+gene_score_ranked <- sort(gene_scores, decreasing=TRUE)
+
+## show the names of the top 10 genes
+top_10_genes <- names(gene_score_ranked[1:10])
+top_10_genes 
+```

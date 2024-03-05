@@ -1,0 +1,335 @@
+---
+title: "class13"
+format: pdf
+---
+
+```{r}
+library(BiocManager)
+library(DESeq2)
+```
+
+```{r}
+# Complete the missing code
+counts <- read.csv("airway_scaledcounts.csv", row.names=1)
+metadata <-  read.csv("airway_metadata.csv")
+```
+
+```{r}
+head(counts)
+```
+
+```{r}
+head(metadata)
+```
+
+## Q1. How may genes are in this dataset?
+
+```{r}
+dim(counts)
+```
+
+A: 38694
+
+## Q2. How many 'control' cell lines do we have?
+
+```{r}
+n.control <- sum(metadata$dex == "control")
+n.control
+```
+
+A: 4
+
+## Q3. How would you make the above code in either approach more robust? Is there a function that could help here?
+
+```{r}
+control <- metadata[metadata[,"dex"]=="control",]
+control.counts <- counts[ ,control$id]
+# Instead of this:
+# control.mean <- rowSums( control.counts )/4 
+# Use a function to account for different dataset sizes
+control.mean <- rowMeans( control.counts )
+head(control.mean)
+```
+
+## Q4. Follow the same procedure for the treated samples (i.e. calculate the mean per gene across drug treated samples and assign to a labeled vector called treated.mean)
+
+```{r}
+treated <- metadata[metadata[,"dex"]=="treated",]
+treated.mean <- rowMeans( counts[ ,treated$id] ) 
+head(treated.mean)
+```
+
+```{r}
+meancounts <- data.frame(control.mean, treated.mean)
+colSums(meancounts)
+```
+
+## Q5. a) Create a scatter plot showing the mean of the treated samples against the mean of the control samples. Your plot should look something like the following.
+
+```{r}
+plot(meancounts, xlab="Control", ylab="Treated")
+```
+
+## b) You could also use the ggplot2 package to make this figure producing the plot below. What geom\_?() function would you use for this plot?
+
+A: geom_point()
+
+```{r}
+library(ggplot2)
+meancountsp <- ggplot(meancounts, aes(x=control.mean, y=treated.mean)) + geom_point(alpha=0.4) + labs(x = "Control", y="Treated") + theme_classic()
+meancountsp
+```
+
+## Q6. Try plotting both axes on a log scale. What is the argument to plot() that allows you to do this?
+
+A: log = "xy" to specify that both axes should be transformed
+
+```{r}
+plot(meancounts, log="xy", xlab="Control", ylab="Treated")
+```
+
+```{r}
+# same thing but with ggplot now
+meancountsp + scale_x_continuous(trans="log2") + scale_y_continuous(trans="log2")
+```
+
+```{r}
+meancounts$log2fc <- log2(meancounts[,"treated.mean"]/meancounts[,"control.mean"])
+head(meancounts)
+
+zero.vals <- which(meancounts[,1:2]==0, arr.ind=TRUE)
+
+to.rm <- unique(zero.vals[,1])
+mycounts <- meancounts[-to.rm,]
+head(mycounts)
+```
+
+## Q7. What is the purpose of the arr.ind argument in the which() function call above? Why would we then take the first column of the output and need to call the unique() function?
+
+A: to keep the array indices (positions) for each value with that value, so we know where each TRUE value started. We can then take the first column with unique() to make sure we don't count any row twice if it has 0 entries in both samples.
+
+```{r}
+up.ind <- mycounts$log2fc > 2
+down.ind <- mycounts$log2fc < (-2)
+```
+
+## Q8. Using the up.ind vector above can you determine how many up regulated genes we have at the greater than 2 fc level?
+
+```{r}
+sum(up.ind)
+```
+
+A: 250
+
+## Q9. Using the down.ind vector above can you determine how many down regulated genes we have at the greater than 2 fc level?
+
+```{r}
+sum(down.ind)
+```
+
+A: 367
+
+## Q10. Do you trust these results? Why or why not?
+
+A: Not particularly. Our results are based on fold change, which can be very large WITHOUT being statistically significant-- we don't know if the differences we see are actually significant.
+
+```{r}
+library(DESeq2)
+citation("DESeq2")
+```
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData=counts, 
+                              colData=metadata, 
+                              design=~dex)
+dds
+```
+
+```{r}
+vsd <- vst(dds, blind = FALSE)
+plotPCA(vsd, intgroup = c("dex"))
+
+# ggplot builds pca from scratch
+pcaData <- plotPCA(vsd, intgroup=c("dex"), returnData=TRUE)
+head(pcaData)
+# Calculate percent variance per PC for the plot axis labels
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+ggplot(pcaData) +
+  aes(x = PC1, y = PC2, color = dex) +
+  geom_point(size =3) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed() +
+  theme_bw()
+```
+
+```{r}
+dds <- DESeq(dds)
+```
+
+```{r}
+res <- results(dds)
+res
+```
+
+```{r}
+# convert res object to data frame and bring up in data viewer
+resdf <- as.data.frame(res)
+View(resdf)
+# notice that you get an adjusted p-value of NA when the baseMean is too low (i.e. on a scale of #e+00)
+summary(res)
+```
+
+```{r}
+# customize results table
+res05 <- results(dds, alpha=0.05)
+summary(res05)
+```
+
+```{r}
+# add annotation data to help w mapping between ID schemes
+library("AnnotationDbi")
+# organism annotation package (“org”) for Homo sapiens (“Hs”), organized as an AnnotationDbi database package (“db”), using Entrez Gene IDs (“eg”) as primary key
+library("org.Hs.eg.db")
+
+columns(org.Hs.eg.db)
+```
+
+```{r}
+# use maplds to add indiv columns to our results table
+res$symbol <- mapIds(org.Hs.eg.db,
+                     keys=row.names(res), # Our gene names
+                     keytype="ENSEMBL", # The format of our gene names
+                     column="SYMBOL",   # The new format we want to add
+                     multiVals="first")
+head(res)
+```
+
+## Q11. Run the mapIds() function two more times to add the Entrez ID and UniProt accession and GENENAME as new columns called res$entrez, res$uniprot and res\$genename.
+
+```{r}
+res$entrez <- mapIds(org.Hs.eg.db,
+                     keys=row.names(res), 
+                     keytype="ENSEMBL",
+                     column="ENTREZID",
+                     multiVals="first")
+res$uniprot <- mapIds(org.Hs.eg.db,
+                     keys=row.names(res), 
+                     keytype="ENSEMBL", 
+                     column="UNIPROT", 
+                     multiVals="first")
+res$genename <- mapIds(org.Hs.eg.db,
+                     keys=row.names(res),
+                     keytype="ENSEMBL", 
+                     column="GENENAME",
+                     multiVals="first")
+head(res)
+```
+
+```{r}
+ord <- order( res$padj )
+#View(res[ord,])
+head(res[ord,])
+```
+
+```{r}
+write.csv(res[ord,], "deseq_results.csv")
+```
+
+```{r}
+plot( res$log2FoldChange,  -log(res$padj), 
+      xlab="Log2(FoldChange)",
+      ylab="-Log(P-value)")
+
+plot( res$log2FoldChange,  -log(res$padj), 
+ ylab="-Log(P-value)", xlab="Log2(FoldChange)")
+
+# Add some cut-off lines
+abline(v=c(-2,2), col="darkgray", lty=2)
+abline(h=-log(0.05), col="darkgray", lty=2)
+```
+
+```{r}
+# Setup our custom point color vector 
+mycols <- rep("gray", nrow(res))
+mycols[ abs(res$log2FoldChange) > 2 ]  <- "red" 
+
+inds <- (res$padj < 0.01) & (abs(res$log2FoldChange) > 2 )
+mycols[ inds ] <- "blue"
+
+# Volcano plot with custom colors 
+plot( res$log2FoldChange,  -log(res$padj), 
+ col=mycols, ylab="-Log(P-value)", xlab="Log2(FoldChange)" )
+
+# Cut-off lines
+abline(v=c(-2,2), col="gray", lty=2)
+abline(h=-log(0.1), col="gray", lty=2)
+```
+```{r}
+library(EnhancedVolcano)
+x <- as.data.frame(res)
+
+EnhancedVolcano(x,
+    lab = x$symbol,
+    x = 'log2FoldChange',
+    y = 'pvalue')
+```
+
+```{r}
+library(pathview)
+library(gage)
+library(gageData)
+
+data(kegg.sets.hs)
+
+# Examine the first 2 pathways in this kegg set for humans
+head(kegg.sets.hs, 2)
+
+foldchanges = res$log2FoldChange
+names(foldchanges) = res$entrez
+head(foldchanges)
+
+# Get the results
+keggres = gage(foldchanges, gsets=kegg.sets.hs)
+
+attributes(keggres)
+```
+
+```{r}
+# Look at the first three down (less) pathways
+head(keggres$less, 3)
+```
+
+```{r}
+pathview(gene.data=foldchanges, pathway.id="hsa05310")
+
+# A different PDF based output of the same data
+pathview(gene.data=foldchanges, pathway.id="hsa05310", kegg.native=FALSE)
+```
+
+## Q12. Can you do the same procedure as above to plot the pathview figures for the top 2 down-regulated pathways?
+```{r}
+pathview(gene.data=foldchanges, pathway.id="hsa04940")
+
+pathview(gene.data=foldchanges, pathway.id="hsa05332")
+```
+
+```{r}
+i <- grep("CRISPLD2", res$symbol)
+res[i,]
+
+plotCounts(dds, gene="ENSG00000103196", intgroup="dex")
+
+# Return the data
+d <- plotCounts(dds, gene="ENSG00000103196", intgroup="dex", returnData=TRUE)
+head(d)
+
+boxplot(count ~ dex , data=d)
+
+library(ggplot2)
+ggplot(d, aes(dex, count, fill=dex)) + 
+  geom_boxplot() + 
+  scale_y_log10() + 
+  ggtitle("CRISPLD2")
+```
