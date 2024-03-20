@@ -1,0 +1,56 @@
+---
+title: "findagene"
+format: pdf
+---
+
+**\[Q5\]** Generate a multiple sequence alignment with your novel protein, your original query protein, and a group of other members of this family from different species. A typical number of proteins to use in a multiple sequence alignment for this assignment purpose is a minimum of 5 and a maximum of 20 - although the exact number is up to you. Include the multiple sequence alignment in your report. Use Courier font with a size appropriate to fit page width. Side-note: Indicate your sequence in the alignment by choosing an appropriate name for each sequence in the input unaligned sequence file (i.e. edit the sequence file so that the species, or short common, names (rather than accession numbers) display in the output alignment and in the subsequent answers below). The goal in this step is to create an interesting an alignment for building a phylogenetic tree that illustrates species divergence.
+
+
+
+```{r}
+library(bio3d)
+library(ggplot2)
+library(pheatmap)
+library(dplyr)
+```
+
+```{r}
+a <- read.fasta("MSA_1.fst")
+aseqid <- seqidentity(a)
+aseqid
+rd <- rmsd(aseqid, fit=T)
+colnames(rd) <- c("Aquatica", "Crassostrea", "Glossina", "Heliothis", "Malus", "Aedes", "Phaseolus", "Picea", "Callosobruchus")
+rownames(rd) <- c("Aquatica", "Crassostrea", "Glossina", "Heliothis", "Malus", "Aedes", "Phaseolus", "Picea", "Callosobruchus")
+pheatmap(rd, color=c("#02bf30", "#0ccb07", "#33ff50", "#85ff96", "#a6ffb3", "#c6fdce", "#ddffe6"))
+```
+
+```{r}
+a <- read.fasta("MSA_1.fst")
+aseqid <- seqidentity(a)
+aseqid
+```
+
+```{r}
+a
+a$ali[4,]
+```
+
+```{r}
+blast.pdb(a$ali[4,]) 
+#5KYV_A
+#1BA3_A
+#5KYT_A
+#3IEP_A
+```
+
+```{r}
+uniqueHits <- pdb.annotate(c("5KYV_A", "1BA3_A", "5KYT_A"))
+uniqueHits <- data.frame(uniqueHits$structureId, uniqueHits$experimentalTechnique, uniqueHits$resolution, uniqueHits$source)
+uniqueHits
+colnames(uniqueHits) <- c("structure identifier", "method", "resolution", "source organism")
+uniqueHits
+```
+
+```{r}
+read.pdb("5KYV")
+```
